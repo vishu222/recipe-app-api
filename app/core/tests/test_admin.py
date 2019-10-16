@@ -2,6 +2,7 @@ from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
+
 class AdminTest(TestCase):
     """test for the user is listed in admin user list"""
 
@@ -13,14 +14,14 @@ class AdminTest(TestCase):
         )
         self.client.force_login(self.admin_user)
         self.user = get_user_model().objects.create_user(
-            email = 'test@panipuri.com',
-            password = 'test123',
-            name = 'this user is for testing'
+            email='test@panipuri.com',
+            password='test123',
+            name='this user is for testing'
         )
 
     def test_user_listed(self):
         """test the usera are listed on the users admin page"""
-        url =reverse('admin:core_user_changelist')
+        url = reverse('admin:core_user_changelist')
         res = self.client.get(url)
 
         self.assertContains(res, self.user.email)
@@ -29,7 +30,7 @@ class AdminTest(TestCase):
     def test_user_change_page(self):
         """test that the user edit page works"""
         url = reverse('admin:core_user_change', args=[self.user.id])
-        #/admin/core/user/1
+        # /admin/core/user/1
         res = self.client.get(url)
         self.assertEquals(res.status_code, 200)
 
@@ -38,6 +39,3 @@ class AdminTest(TestCase):
         url = reverse('admin:core_user_add')
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
-
-
-
