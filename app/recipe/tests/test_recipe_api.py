@@ -1,3 +1,7 @@
+import tempfile
+import os
+from PIL import Image
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -11,6 +15,11 @@ from recipe.serializers import RecipeSerializer, RecipeDetailSerializer
 from decimal import Decimal
 
 RECIPES_URL = reverse('recipe:recipe-list')
+
+
+def image_upload_url(recipe_id):
+    """return the recipe image upload url"""
+    return reverse('recipe:recipe-upload-image', args=[recipe_id])
 
 
 def detail_url(recipe_id):
@@ -28,7 +37,7 @@ def sample_ingredient(user, name='Cinnamon'):
     return Ingredient.objects.create(user=user, name=name)
 
 
-def create_recipe(user, **params):
+def sample_recipe(user, **params):
     """create and return a sample recipe"""
     defaults = {
         'title': 'sample recipe',
@@ -63,8 +72,8 @@ class PrivateRecipeApiTest(TestCase):
 
     def test_retrieve_recipe(self):
         """Test retrieving a list of recipes"""
-        create_recipe(user=self.user)
-        create_recipe(user=self.user)
+        sample_recipe(user=self.user)
+        sample_recipe(user=self.user)
 
         res = self.client.get(RECIPES_URL)
         recipes = Recipe.objects.all().order_by('-id')
@@ -80,8 +89,8 @@ class PrivateRecipeApiTest(TestCase):
             password='test123'
         )
 
-        create_recipe(user=user2)
-        create_recipe(user=self.user)
+        sample_recipe(user=user2)
+        sample_recipe(user=self.user)
 
         res = self.client.get(RECIPES_URL)
 
@@ -92,7 +101,7 @@ class PrivateRecipeApiTest(TestCase):
 
     def test_view_recipe_detail(self):
         """Test viewing the recipe detail"""
-        recipe = create_recipe(user=self.user)
+        recipe = sample_recipe(user=self.user)
         recipe.tags.add(sample_tag(user=self.user))
         recipe.ingredients.add(sample_ingredient(user=self.user))
 
@@ -157,7 +166,7 @@ class PrivateRecipeApiTest(TestCase):
 
         def test_partial_update_recipe(self):
             """Test updating a recipe with patch"""
-            recipe = create_recipe(user=self.user)
+            recipe = sample_recipe(user=self.user)
             recipe.tags.add(sample_tag(user=self.user))
             new_tag = sample_tag(user=self.user, name='updated name')
             payload = {
@@ -174,7 +183,7 @@ class PrivateRecipeApiTest(TestCase):
 
         def test_full_update_recipe(self):
             """Test updating a recipe with put"""
-            recipe = create_recipe(user=self.user)
+            recipe = sample_recipe(user=self.user)
             recipe.tags.add(sample_tag(user=self.user))
 
             payload = {
@@ -190,3 +199,37 @@ class PrivateRecipeApiTest(TestCase):
             self.assertEqual(recipe.price, payload['price'])
             tags = recipe.tags.all()
             self.assertEqual(len(tags), 0)
+
+
+class RecipeImageUploadTest(TestCase):
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(
+            'vishwa@test.com',
+            'pass123'
+        )
+        self.client.force_authenticate(self.user)
+        self.recipe = sample_recipe(user=self.user)
+
+    def tear_down(self):
+        self.recipe.image.delete()
+
+    def test_upload_image_to_recipe(self):
+        """Test uploading an image to recipe"""
+        url = image_upload_url(self.recipe.id)
+        with tempfile.NamedTemporaryFile(suffix='.jpg') as ntf:
+            img = Image.new('RGB', (10, 10))
+            img.save(ntf, format='JPEG')
+            ntf.seek(0)
+            res = self.client.post(url, {'image': ntf}, format='multipart')
+        self.recipe.refresh_from_db()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('image', res.data)
+        self.assertTrue(os.path.exists(self.recipe.image.path))
+
+    def test_upload_image_bad_request(self):
+        """Test uploading an invalid image"""
+        url = image_upload_url(self.recipe.id)
+        res = self.client.post(url, {'image': 'badimage'}, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
