@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 
 from django.test import TestCase
 
-from core.models import Ingredient
+from core.models import Ingredient, Recipe
 
 from recipe.serializers import IngredientSerializer
 
@@ -78,3 +78,48 @@ class PrivateIngredientApiTests(TestCase):
         res = self.client.post(INGREDIENT_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_retrieve_ingredients_assigned_to_recipe(self):
+        """Test retrieving ingredients assigned to a recipe"""
+        ingredient1 = Ingredient.objects.create(
+            user=self.user, name='Soya milk'
+        )
+        ingredient2 = Ingredient.objects.create(
+            user=self.user, name='Cheese'
+        )
+        recipe = Recipe.objects.create(
+            title='Soya milk Sewai',
+            time_minutes=5,
+            price=30,
+            user=self.user
+        )
+        recipe.ingredients.add(ingredient1)
+        res = self.client.get(INGREDIENT_URL, {'assigned_only': 1})
+        serializer1 = IngredientSerializer(ingredient1)
+        serializer2 = IngredientSerializer(ingredient2)
+
+        self.assertIn(serializer1.data, res.data)
+        self.assertNotIn(serializer2.data, res.data)
+
+    def test_retrieve_ingredients_assigned_unique(self):
+        """Test retrieving ingredients by assigned return unique items"""
+        ingredient = Ingredient.objects.create(
+            user=self.user, name='Soya milk'
+        )
+        Ingredient.objects.create(user=self.user, name='Cheese')
+        recipe1 = Recipe.objects.create(
+            title='Soya milk sewai',
+            time_minutes=5,
+            price=30,
+            user=self.user
+        )
+        recipe1.ingredients.add(ingredient)
+        recipe2 = Recipe.objects.create(
+            title='Cheese cake',
+            time_minutes=3,
+            price=20,
+            user=self.user
+        )
+        res = self.client.get(INGREDIENT_URL, {'assigned_only': 1})
+        recipe2.ingredients.add(ingredient)
+        self.assertEqual(len(res.data), 1)
